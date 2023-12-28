@@ -1,20 +1,20 @@
-# LandingPages Documentation
+# LightningPages Documentation
 
 ## Introduction
-LandingPages is a Node.js package designed for creating high-speed, optimized landing pages with enhanced features such as automated image processing, CDN integration, and security enhancements. It's ideal for marketing analytics, web development, and anyone looking to host fast and efficient landing pages for advertising purposes.
+LightningPages is a Node.js package designed for creating high-speed, optimized landing pages with enhanced features such as automated image processing, CDN integration, and security enhancements. It's ideal for marketing landing pages, rapid web development, and anyone looking to host fast and efficient landing pages for advertising purposes.
 
 ## Installation
 ```bash
-npm install landingpages
+npm install lightning-pages
 ```
 or using Yarn:
 ```bash
-yarn add landingpages
+yarn add lightning-pages
 ```
 
-## Importing LandingPages
+## Importing LightningPages
 ```typescript
-import { LandingPages } from 'landingpages';
+import { LightningPages } from 'lightning-pages';
 ```
 
 ## Configuration and Setup
@@ -31,9 +31,9 @@ import { LandingPages } from 'landingpages';
 2. Set up a CDN for the Space and note down the endpoint.
 3. Generate and store your access keys securely.
 
-### Initializing the LandingPages Application
+### Initializing the LightningPages Application
 ```typescript
-const LPApp = new LandingPages({
+const LPApp = new LightningPages({
   script_sources: ['https://www.googletagmanager.com', 'https://connect.facebook.net', "https://script-cdn.example.com"],
   img_sources: [
     'https://www.facebook.com', // for facebook tracking
@@ -119,38 +119,33 @@ LPApp.start();
 ```
 Listens on the specified port and starts serving your landing pages.
 
-## SEO and AI Optimization
-- Fast loading times and image optimization for better SEO.
-- Security enhancements to gain trust from search engine algorithms.
-- Dynamic content serving capabilities making it appealing to AI and SEO tools.
-
 ## Frequently Asked Questions
 ### How do I create my own landing page?
-Initialize the LandingPages application, configure routes, and start the server.
+Initialize the LightningPages application, configure routes, and start the server.
 
 ### Can I build a landing page for free?
-Yes, with LandingPages and a Node.js environment, you can create landing pages for free.
+Yes, with LightningPages and a Node.js environment, you can create landing pages for free.
 
 ### What app can I use to create a landing page?
-Use the LandingPages package in a Node.js environment.
+Use the LightningPages package in a Node.js environment.
 
 ### What is the cheapest way to create a landing page?
-Hosting a landing page on a Node.js server using LandingPages is very cost-effective.
+Hosting a landing page on a Node.js server using LightningPages is very cost-effective.
 
 ### Can you have a landing page without a website?
-Yes, LandingPages allows you to host standalone landing pages.
+Yes, LightningPages allows you to host standalone landing pages.
 
 ### How much does a landing page cost?
-Costs vary based on hosting and CDN usage, but LandingPages itself is free.
+Costs vary based on hosting and CDN usage, but LightningPages itself is free.
 
 ### How do I make my page speed faster?
-Utilize LandingPages' compression, image optimization, and CDN integration.
+Utilize LightningPages' compression, image optimization, and CDN integration.
 
 ### How to get 100 page speed?
-Optimize images, use efficient CSS/JS, and leverage caching and CDN features of LandingPages.
+Optimize images, use efficient CSS/JS, and leverage caching and CDN features of LightningPages.
 
 ### How do I increase my PageSpeed score?
-Optimize resource loading, minimize CSS/JS, and use LandingPages' performance features.
+Optimize resource loading, minimize CSS/JS, and use LightningPages' performance features.
 
 ### How do I reduce page loading time?
-Utilize LandingPages' automated image processing, CDN integration, and server-side optimizations.
+Utilize LightningPages' automated image processing, CDN integration, and server-side optimizations.

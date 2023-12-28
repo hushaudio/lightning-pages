@@ -4,7 +4,7 @@ import { S3Client } from '@aws-sdk/client-s3';
 
 import chokidar from 'chokidar';
 
-export interface LandingPageOptions {
+export interface LightningPageOptions {
   port?: number;
   cdn_baseurl?: string;
   script_sources?: string[];
@@ -13,7 +13,7 @@ export interface LandingPageOptions {
   compression?: any;
 }
 
-export class LandingPages {
+export class LightningPages {
   public CDN_ROOT_URI: string;
   public projectRoot: string;
   public cdn?: DigitalOceanCDN;
@@ -26,7 +26,7 @@ export class LandingPages {
   private globalCSS: string;
   private cssUpdateTime?: Date;
 
-  constructor(options: LandingPageOptions);
+  constructor(options: LightningPageOptions);
   public page(url: string, callback: RouteHandlerMethod): void;
   getPageCSS(): string;
   private getRawCSS(cssPath?: string): Promise<string>;

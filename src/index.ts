@@ -17,13 +17,14 @@ import { Upload } from "@aws-sdk/lib-storage";
 //@ts-ignore
 import webp from 'webp-converter';
 
-interface LandingPageOptions {
+interface LightningPagesOptions {
   port?: number
   cdn_baseurl?: string
   script_sources?: string[]
   img_sources?: string[]
   connect_sources?: string[]
   compression?: any
+  production: boolean // default: false
 }
 
 dotenv.config()
@@ -36,9 +37,9 @@ const debounce = (func: Function, delay: number) => {
   }
 }
 
-export class LandingPages {
+export class LightningPages {
 
-  constructor (options: LandingPageOptions) {
+  constructor (options: LightningPagesOptions) {
     const { port, script_sources = [], img_sources = [], connect_sources = [], compression, cdn_baseurl = this.CDN_ROOT_URI } = options
     
     if (process.env.CDN_REGION && process.env.CDN_ACCESS_KEY && process.env.CDN_ACCESS_SECRET && process.env.CDN_BUCKET_NAME && cdn_baseurl) {
@@ -71,6 +72,9 @@ export class LandingPages {
       engine: { ejs },
       root: path.join(this.projectRoot, 'views'),
       viewExt: 'ejs',
+      defaultContext: {
+        dev: options.production || process.env.NODE_ENV === "development", // Inside your templates, `dev` will be `true` if the expression evaluates to true
+      },
       options: { filename: path.join(this.projectRoot, 'views') }
     })
 
