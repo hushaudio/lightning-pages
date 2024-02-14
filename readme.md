@@ -2,7 +2,7 @@
 
 ## Introduction
 LightningPages is a Node.js package designed for creating high-speed, optimized landing pages with enhanced features such as automated image processing, CDN integration, and security enhancements. It's ideal for marketing landing pages, rapid web development, and anyone looking to host fast and efficient landing pages for advertising purposes.
-
+ 
 ## Installation
 ```bash
 npm install lightning-pages
