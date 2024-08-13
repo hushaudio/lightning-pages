@@ -45,7 +45,8 @@ const LPApp = new LightningPages({
     "https://some-api-service.example.com" // example api service
   ],
   compression: { threshold: 1024 },
-  cdn_baseurl: 'https://bucket-name.region.digitaloceanspaces.com'
+  cdn_baseurl: 'https://bucket-name.region.digitaloceanspaces.com',
+  projectRoot: __dirname // optional, defaults to process.cwd()
 });
 ```
 

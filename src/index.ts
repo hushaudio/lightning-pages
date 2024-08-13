@@ -3,21 +3,23 @@ import * as path from 'path'
 import * as fs from 'fs'
 import helmet from '@fastify/helmet'
 import pointOfView from '@fastify/view' //@ts-ignore
-import ejs from 'ejs'
+import * as ejs from 'ejs'
 import staticPlugin from '@fastify/static'
 import * as dotenv from 'dotenv'
 import * as chokidar from 'chokidar'
 import fetch from 'node-fetch'
-
 import compress from '@fastify/compress'
+import { brotliCompressSync } from 'zlib' // Use built-in zlib for Brotli compression
+
+import * as zlib from 'zlib'
 
 import { DeleteObjectCommand, PutObjectCommandInput, S3Client } from '@aws-sdk/client-s3'
 import { Upload } from "@aws-sdk/lib-storage";
 
 //@ts-ignore
 import webp from 'webp-converter';
-
 interface LightningPagesOptions {
+  projectRoot?: string
   port?: number
   cdn_baseurl?: string
   script_sources?: string[]
@@ -40,32 +42,38 @@ const debounce = (func: Function, delay: number) => {
 export class LightningPages {
 
   constructor (options: LightningPagesOptions) {
-    const { port, script_sources = [], img_sources = [], connect_sources = [], compression, cdn_baseurl = this.CDN_ROOT_URI } = options
+    const { projectRoot, port, script_sources = [], img_sources = [], connect_sources = [], compression, cdn_baseurl = this.CDN_ROOT_URI } = options;
     
-    if (process.env.CDN_REGION && process.env.CDN_ACCESS_KEY && process.env.CDN_ACCESS_SECRET && process.env.CDN_BUCKET_NAME && cdn_baseurl) {
-      this.cdn = new DigitalOceanCDN(cdn_baseurl)
+    this.projectRoot = projectRoot || process.cwd();
+    const isCDNConfigured = process.env.CDN_REGION && process.env.CDN_ACCESS_KEY && process.env.CDN_ACCESS_SECRET && process.env.CDN_BUCKET_NAME && cdn_baseurl;
+
+    if (isCDNConfigured) {
+      console.log("passed the condition for cdn");
+      this.cdn = new DigitalOceanCDN(cdn_baseurl);
+    } else {
+      console.log("cdn not available");
     }
 
-    this.images = new ImageHandler(this.cdn)
+    this.images = new ImageHandler(this.cdn);
 
     // Set port
-    const portNumber = port || process.env.PORT || 8000
-    this.port = typeof portNumber === 'string' ? parseInt(portNumber) : portNumber
-    this.fastify = Fastify({ logger: true })
+    const portNumber = port || process.env.PORT || 8000;
+    this.port = typeof portNumber === 'string' ? parseInt(portNumber) : portNumber;
+    this.fastify = Fastify({ logger: true });
 
     const directives = {
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'", "'unsafe-inline'", ...script_sources],
       imgSrc: ["'self'", 'data:', ...img_sources],
       connectSrc: ["'self'", ...connect_sources]
-    }
+    };
 
     // Register Helmet for Basic Security
     this.fastify.register(helmet, {
       contentSecurityPolicy: {
         directives
       }
-    })
+    });
 
     // Register View Engine
     this.fastify.register(pointOfView, {
@@ -75,54 +83,54 @@ export class LightningPages {
       defaultContext: {
         dev: options.production || process.env.NODE_ENV === "development", // Inside your templates, `dev` will be `true` if the expression evaluates to true
       },
-      options: { filename: path.join(this.projectRoot, 'views') }
-    })
+      // options: { filename: path.join(this.projectRoot, 'views') }
+    });
 
     this.fastify.register(compress, compression || {
       threshold: 1024, // Only compress responses that are at least 1KB
-      brotli: require('iltorb') // Use iltorb for Brotli compression (optional)
-    })
+      brotli: {
+        params: {
+          [zlib.constants.BROTLI_PARAM_QUALITY]: 4,
+        }
+      }
+    });
 
     // Serve Static Files
     this.fastify.register(staticPlugin, {
       root: path.join(this.projectRoot, 'public'),
-      prefix: '/' // optional: default '/'
-    })
+      prefix: '/', // Ensure the prefix is set correctly
+    });
 
     this.fastify.get('/css/cache/bust', async (req, reply) => {
-      this.globalCSS = this.getRawCSSCached()
-      reply.send('OK!')
-    })
+      this.globalCSS = this.getRawCSSCached();
+      reply.send('OK!');
+    });
 
-    // Serve Static Files
-    if (cdn_baseurl) {
-
+    if (isCDNConfigured) {
       this.fastify.get('/cdn/*', (req: FastifyRequest<{ Params: any }>, reply) => {
         // Capture the full path after /cdn/
         // @ts-ignore
-        const fullPath = req.params['*']
+        const fullPath = req.params['*'];
         // Construct the CDN URL with the full path
-        const cdnUrl = `${options.cdn_baseurl}/${fullPath}`
+        const cdnUrl = `${options.cdn_baseurl}/${fullPath}`;
         // Redirect the request to the CDN URL
-        console.log({ cdnUrl })
-        reply.redirect(cdnUrl)
-      })
+        console.log({ cdnUrl });
+        reply.redirect(cdnUrl);
+      });
 
       // Middleware to check for file extension and redirect to CDN
-      this.fastify.addHook('onRequest', (request:FastifyRequest, reply:any, done:any) => {
-        const url = request.raw.url as string
-        if (cdn_baseurl && /\.\w+$/.test(url) && !url.endsWith('.ico')) { // Regex to check if URL ends with a file extension
-          const newUrl = cdn_baseurl + url
-          reply.redirect(newUrl)
+      this.fastify.addHook('onRequest', (request: FastifyRequest, reply: FastifyReply, done: Function) => {
+        const url = request.raw.url as string;
+        if (/\.\w+$/.test(url) && !url.endsWith('.ico')) { // Regex to check if URL ends with a file extension
+          const newUrl = cdn_baseurl + url;
+          reply.redirect(newUrl);
         } else {
-          done()
+          done();
         }
-      })
-
+      });
     }
 
     if (process.env.SGTM_URL) {
-
       this.fastify.all('/s-g-t-m/*', async (req: FastifyRequest, reply: FastifyReply) => {
         // Convert IncomingHttpHeaders to a compatible format for fetch
         const headersInit: Record<string, string> = {};
@@ -132,10 +140,10 @@ export class LightningPages {
             headersInit[key] = Array.isArray(value) ? value.join(', ') : value;
           }
         });
-    
+
         // Read body from the request
         const requestBody = await req.body; // Assuming body parsing is enabled in Fastify
-        const url = process.env.SGTM_URL as string + req.raw.url?.replace('/s-g-t-m', '')
+        const url = process.env.SGTM_URL as string + req.raw.url?.replace('/s-g-t-m', '');
         console.log({ url, options: {
           method: req.raw.method,
           headers: headersInit,
@@ -148,7 +156,7 @@ export class LightningPages {
             headers: headersInit,
             body: JSON.stringify(requestBody) // Convert body to string if necessary
           });
-    
+
           // Process the response from fetch and send it back to the client
           const responseBody = await response.text();
           reply.type(response.headers.get('content-type') || 'text/plain').send(responseBody);
@@ -158,10 +166,10 @@ export class LightningPages {
       });
     }
 
-    this.watchCSSFile()
-    this.watchImageFolder()
-    this.globalCSS = this.getRawCSSCached()
-    this.debouncedGetRawCSSCached = debounce(this.getRawCSSCached.bind(this), 1000)
+    this.watchCSSFile();
+    this.watchImageFolder();
+    this.globalCSS = this.getRawCSSCached();
+    this.debouncedGetRawCSSCached = debounce(this.getRawCSSCached.bind(this), 1000);
   }
   
   public CDN_ROOT_URI = `https://${process.env.CDN_BUCKET_NAME}.${process.env.CDN_REGION}.digitaloceanspaces.com`
@@ -260,6 +268,7 @@ export class LightningPages {
   }
 }
 
+
 export class ImageHandler {
   constructor(
     public cdn?: DigitalOceanCDN
@@ -267,10 +276,17 @@ export class ImageHandler {
 
   public async updateImageFolder(filepath: string) { 
     const webpImage = await this.convertToWebP(filepath) as string;
-    if(typeof webpImage !== 'string') return
-    let cdnFilepath = path.normalize(webpImage).split('public')[1].replace(/\\/g, '/');
-    cdnFilepath = cdnFilepath.startsWith('/') ? cdnFilepath.slice(1) : cdnFilepath;
-    if(this.cdn?.uploadImage) await this.cdn.uploadImage(fs.readFileSync(webpImage), cdnFilepath).catch(console.error)
+    if (typeof webpImage !== 'string') return;
+
+    // Upload original image
+    let originalCdnFilepath = path.normalize(filepath).split('public')[1].replace(/\\/g, '/');
+    originalCdnFilepath = originalCdnFilepath.startsWith('/') ? originalCdnFilepath.slice(1) : originalCdnFilepath;
+    if (this.cdn?.uploadImage) await this.cdn.uploadImage(fs.readFileSync(filepath), originalCdnFilepath).catch(console.error);
+
+    // Upload WebP image
+    let webpCdnFilepath = path.normalize(webpImage).split('public')[1].replace(/\\/g, '/');
+    webpCdnFilepath = webpCdnFilepath.startsWith('/') ? webpCdnFilepath.slice(1) : webpCdnFilepath;
+    if (this.cdn?.uploadImage) await this.cdn.uploadImage(fs.readFileSync(webpImage), webpCdnFilepath).catch(console.error);
   }
 
   public async convertToWebP (filePath: string) {
@@ -293,7 +309,6 @@ export class ImageHandler {
     }
   }
 }
-
 
 export class DigitalOceanCDN {
   private s3Client: S3Client;
