@@ -1,3 +1,4 @@
+![npm](https://img.shields.io/npm/dt/lightning-pages)
 # LightningPages Documentation
 
 ## Introduction
