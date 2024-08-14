@@ -11,13 +11,15 @@ import fetch from 'node-fetch'
 import compress from '@fastify/compress'
 import { brotliCompressSync } from 'zlib' // Use built-in zlib for Brotli compression
 
+import favicon from 'fastify-favicon'
+
 import * as zlib from 'zlib'
 
 import { DeleteObjectCommand, PutObjectCommandInput, S3Client } from '@aws-sdk/client-s3'
 import { Upload } from "@aws-sdk/lib-storage";
 
 //@ts-ignore
-import webp from 'webp-converter';
+import * as webp from 'webp-converter';
 interface LightningPagesOptions {
   projectRoot?: string
   port?: number
@@ -27,6 +29,7 @@ interface LightningPagesOptions {
   connect_sources?: string[]
   compression?: any
   production: boolean // default: false
+  favicon?: string
 }
 
 dotenv.config()
@@ -37,6 +40,14 @@ const debounce = (func: Function, delay: number) => {
     clearTimeout(inDebounce)
     inDebounce = setTimeout(() => func.apply(this, args), delay)
   }
+}
+
+async function cdnMiddleware(request:any, reply:any, payload:any) {
+  if (process.env.CDN_BASE_URL && typeof payload === 'string') {
+    payload = payload.replace(/src="\/images\//g, `src="${process.env.CDN_BASE_URL}/images/`);
+    payload = payload.replace(/srcset="\/images\//g, `srcset="${process.env.CDN_BASE_URL}/images/`);
+  }
+  return payload;
 }
 
 export class LightningPages {
@@ -68,6 +79,9 @@ export class LightningPages {
       connectSrc: ["'self'", ...connect_sources]
     };
 
+    // Register Favicon Plugin
+    this.fastify.register(favicon, { path: path.join(this.projectRoot, 'public'), name: options.favicon });
+
     // Register Helmet for Basic Security
     this.fastify.register(helmet, {
       contentSecurityPolicy: {
@@ -81,11 +95,11 @@ export class LightningPages {
       root: path.join(this.projectRoot, 'views'),
       viewExt: 'ejs',
       defaultContext: {
-        dev: options.production || process.env.NODE_ENV === "development", // Inside your templates, `dev` will be `true` if the expression evaluates to true
+        dev: options.production || process.env.NODE_ENV === "development",
+        cdn_baseurl: isCDNConfigured ? cdn_baseurl : undefined,
       },
-      // options: { filename: path.join(this.projectRoot, 'views') }
     });
-
+    
     this.fastify.register(compress, compression || {
       threshold: 1024, // Only compress responses that are at least 1KB
       brotli: {
@@ -170,6 +184,9 @@ export class LightningPages {
     this.watchImageFolder();
     this.globalCSS = this.getRawCSSCached();
     this.debouncedGetRawCSSCached = debounce(this.getRawCSSCached.bind(this), 1000);
+
+    // Register the CDN middleware
+    this.fastify.addHook('onSend', cdnMiddleware);
   }
   
   public CDN_ROOT_URI = `https://${process.env.CDN_BUCKET_NAME}.${process.env.CDN_REGION}.digitaloceanspaces.com`
@@ -250,21 +267,35 @@ export class LightningPages {
   }
 
   watchImageFolder () {
-    const imageFolder = path.join(this.projectRoot, 'public', 'images')
+    const imageFolder = path.join(this.projectRoot, 'public', 'images');
 
     const watcher = chokidar.watch(imageFolder, {
       ignored: /(^|[\/\\])\../, // ignore dotfiles
       persistent: true,
       ignoreInitial: false
-    })
-    
+    });
+
     watcher
-    .on('add', filePath => { this.images.updateImageFolder(filePath) })
-    .on('change', filePath => { this.images.updateImageFolder(filePath) })
-    .on('unlink', filePath => { this.images.cdn?.removeFromBucket(filePath) })
-    .on('error', error => { console.error(`Watcher error: ${error}`) })
-    
-    console.log('Watching for image file changes...')
+      .on('add', filePath => {
+        console.log(`File added: ${filePath}`);
+        this.images.updateImageFolder(filePath).catch(console.error);
+      })
+      .on('change', filePath => {
+        console.log(`File changed: ${filePath}`);
+        this.images.updateImageFolder(filePath).catch(console.error);
+      })
+      .on('unlink', filePath => {
+        console.log(`File removed: ${filePath}`);
+        this.images.cdn?.removeFromBucket(filePath).catch(console.error);
+      })
+      .on('error', error => {
+        console.error(`Watcher error: ${error}`);
+      });
+
+    console.log('Watching for image file changes...');
+
+    // Initial check and upload of images in the folder
+    this.images.checkAndUploadImages(imageFolder).catch(console.error);
   }
 }
 
@@ -275,18 +306,33 @@ export class ImageHandler {
   ) { }
 
   public async updateImageFolder(filepath: string) { 
+    console.log(`Attempting to update image folder for file: ${filepath}`);
     const webpImage = await this.convertToWebP(filepath) as string;
     if (typeof webpImage !== 'string') return;
 
     // Upload original image
     let originalCdnFilepath = path.normalize(filepath).split('public')[1].replace(/\\/g, '/');
     originalCdnFilepath = originalCdnFilepath.startsWith('/') ? originalCdnFilepath.slice(1) : originalCdnFilepath;
-    if (this.cdn?.uploadImage) await this.cdn.uploadImage(fs.readFileSync(filepath), originalCdnFilepath).catch(console.error);
+    if (this.cdn?.uploadImage) {
+      try {
+        await this.cdn.uploadImage(fs.readFileSync(filepath), originalCdnFilepath);
+        console.log(`Successfully uploaded original image: ${originalCdnFilepath}`);
+      } catch (error) {
+        console.error(`Failed to upload original image: ${originalCdnFilepath}`, error);
+      }
+    }
 
     // Upload WebP image
     let webpCdnFilepath = path.normalize(webpImage).split('public')[1].replace(/\\/g, '/');
     webpCdnFilepath = webpCdnFilepath.startsWith('/') ? webpCdnFilepath.slice(1) : webpCdnFilepath;
-    if (this.cdn?.uploadImage) await this.cdn.uploadImage(fs.readFileSync(webpImage), webpCdnFilepath).catch(console.error);
+    if (this.cdn?.uploadImage) {
+      try {
+        await this.cdn.uploadImage(fs.readFileSync(webpImage), webpCdnFilepath);
+        console.log(`Successfully uploaded WebP image: ${webpCdnFilepath}`);
+      } catch (error) {
+        console.error(`Failed to upload WebP image: ${webpCdnFilepath}`, error);
+      }
+    }
   }
 
   public async convertToWebP (filePath: string) {
@@ -306,6 +352,21 @@ export class ImageHandler {
       await webp.cwebp(filePath, outputFilePath, '-q 80')
       return outputFilePath
     } catch (error) {
+      console.error(`Error converting to WebP: ${error}`);
+    }
+  }
+
+  public async checkAndUploadImages(imageFolder: string) {
+    const files = await fs.promises.readdir(imageFolder, { withFileTypes: true });
+
+    for (const file of files) {
+      if (file.isDirectory()) {
+        const dirPath = path.join(imageFolder, file.name);
+        await this.checkAndUploadImages(dirPath);
+      } else {
+        const filePath = path.join(imageFolder, file.name);
+        await this.updateImageFolder(filePath);
+      }
     }
   }
 }
